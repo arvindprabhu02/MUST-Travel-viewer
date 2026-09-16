@@ -1,0 +1,1587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MUST Travel Planner</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:      #f4f5f7;
+  --surface: #ffffff;
+  --row-alt: #f8f9fa;
+  
+  /* Gray Theme (formerly Green) */
+  --green-dark:   #4a4a4a; /* Dark gray for text/buttons */
+  --green-light:  #f2f2f2; 
+  --green-border: #5a5a5a; /* Medium-dark gray for thick box borders */
+  
+  /* System Colors */
+  --text:    #111827;
+  --mid:     #4b5563;
+  --dim:     #6b7280;
+
+  /* Specific Border Hierarchy */
+  --border-day:    #111111; 
+  --border-route:  #777777; 
+  --border-column: #e0e0e0; 
+}
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13.5px;
+  line-height: 1.5;
+  min-height: 100vh;
+  overflow-x: hidden; /* Prevent horizontal body scroll */
+}
+
+/* ═══════════════════════════════════════════
+   TOP BAR (Desktop Layout)
+═══════════════════════════════════════════ */
+.topbar {
+  position: sticky; top: 0; z-index: 100;
+  background: #ffffff;
+  border-bottom: 2px solid var(--border-day);
+  min-height: 60px;
+  display: flex; align-items: center; 
+  flex-wrap: nowrap;
+  padding: 10px 24px; gap: 16px;
+}
+.logo-area { 
+  display: flex; align-items: center; gap: 10px; flex-shrink: 0; 
+}
+.logo-img  { height: 36px; width: auto; border-radius: 4px; }
+.logo-fb   {
+  height: 36px; width: 36px; background: #111; color: #fff;
+  border-radius: 4px; display: flex; align-items: center; justify-content: center;
+  font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 16px;
+}
+.brand { 
+  font-family: 'Space Grotesk', sans-serif; font-size: 17px; letter-spacing: 4px;
+  text-transform: uppercase; color: #111; font-weight: 700; line-height: 1;
+  display: flex; align-items: center; padding-top: 2px;
+}
+
+.bar-sep { width: 1px; height: 30px; background: #ccc; flex-shrink: 0; margin: 0 4px; }
+
+/* topbar controls */
+.qs-group { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
+.qs-lbl   { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 1.5px;
+            text-transform: uppercase; color: #777; white-space: nowrap; }
+
+/* Theme specific overrides for Query / Nav */
+.qs-group .qs-lbl { color: var(--green-dark); font-weight: 700; }
+
+#querySelect, #daySelect {
+  /* Ensure long text doesn't blow out the layout */
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+#querySelect {
+  font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 600; color: #111;
+  background: #d0d0d0; border: 1px solid #111; border-radius: 6px;
+  padding: 6px 12px; cursor: pointer; outline: none; width: 100%; max-width: 480px;
+}
+#querySelect:focus { box-shadow: 0 0 0 2px rgba(0,0,0,0.15); border-color: #111; }
+
+#daySelect {
+  font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500; color: #111;
+  background: #f5f5f5; border: 1px solid #aaa; border-radius: 6px;
+  padding: 6px 12px; cursor: pointer; outline: none; width: 100%; max-width: 480px;
+}
+#daySelect:focus { border-color: #111; }
+
+.nav-group { display: flex; gap: 6px; flex-shrink: 0; min-width: 0; }
+.nav-btn   {
+  font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; color: #111;
+  background: #d0d0d0; border: 1px solid #111; border-radius: 6px;
+  padding: 6px 14px; cursor: pointer; white-space: nowrap;
+}
+.nav-btn:hover { background: #b8b8b8; }
+
+.day-group { display: flex; align-items: center; gap: 8px; flex-shrink: 0; min-width: 0; }
+
+/* ═══════════════════════════════════════════
+   LOADER
+═══════════════════════════════════════════ */
+#loaderEl {
+  padding: 80px 24px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+  font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 2px;
+  text-transform: uppercase; color: var(--dim);
+}
+.loader-ring {
+  width: 32px; height: 32px; border: 2px solid #ddd; border-top-color: #111;
+  border-radius: 50%; animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.err-note { color: #b00; font-family: 'JetBrains Mono', monospace; font-size: 13px;
+            text-align: center; max-width: 500px; line-height: 1.7; }
+.err-note code { background: #e5e5e5; padding: 2px 6px; border-radius: 4px; }
+
+/* ═══════════════════════════════════════════
+   CONTENT WRAPPER & THICK GREEN DIVIDER
+═══════════════════════════════════════════ */
+.content { max-width: 1040px; margin: 0 auto; padding: 28px 20px 80px; }
+
+.query-divider {
+  height: 4px;
+  background-color: var(--green-border);
+  margin-bottom: 28px;
+  border-radius: 2px;
+}
+
+/* ═══════════════════════════════════════════
+   QUERY INFO CARD 
+═══════════════════════════════════════════ */
+.query-card {
+  background: var(--green-light);
+  border: 2px solid var(--green-border);
+  border-radius: 10px;
+  margin-bottom: 20px;
+  overflow: hidden;
+  box-shadow: 0 3px 8px rgba(0,0,0,0.03);
+}
+.query-card-head {
+  background: var(--green-border);
+  padding: 14px 20px;
+  display: flex; align-items: baseline; gap: 14px;
+}
+.qid-lbl {
+  font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 600; letter-spacing: 1.5px;
+  text-transform: uppercase; color: #b0b0b0;
+}
+.q-heading {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 18px; font-weight: 700; color: #fff; line-height: 1.3;
+}
+.query-card-body { display: grid; grid-template-columns: 1fr auto; gap: 0; }
+.query-left { padding: 20px 24px; border-right: 2px solid var(--green-border); }
+.query-right { padding: 20px 24px; min-width: 260px; background: rgba(255, 255, 255, 0.5); }
+
+.qlabel {
+  font-family: 'JetBrains Mono', monospace; font-size: 9.5px; font-weight: 600; letter-spacing: 1.5px;
+  text-transform: uppercase; color: #666666; margin-bottom: 8px; display: block;
+}
+.query-original {
+  font-size: 13.5px; color: var(--text); line-height: 1.7; font-style: italic;
+  margin-bottom: 18px; border-left: 3px solid #aaaaaa; padding-left: 12px;
+}
+.query-summ { font-size: 13.5px; color: var(--text); line-height: 1.65; margin-bottom: 18px; }
+
+.tag-rows { display: flex; flex-direction: column; gap: 8px; }
+.tag-row  { display: flex; align-items: flex-start; gap: 10px; }
+.tag-key  {
+  font-family: 'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 1px;
+  text-transform: uppercase; color: #666666; white-space: nowrap; padding-top: 4px;
+  min-width: 76px;
+}
+.tag-vals { display: flex; flex-wrap: wrap; gap: 6px; }
+.tag {
+  font-size: 12px; color: var(--green-border); font-weight: 500;
+  background: var(--surface); border: 1px solid #c8c8c8;
+  border-radius: 4px; padding: 2px 10px;
+}
+
+.meta-grid { display: flex; flex-direction: column; gap: 12px; }
+.meta-item {
+  background: #ffffff; border: 1px solid #c8c8c8; border-radius: 8px;
+  padding: 10px 16px; display: flex; flex-direction: column; gap: 4px;
+}
+.meta-k {
+  font-family: 'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 1px;
+  text-transform: uppercase; color: #777;
+}
+.meta-v { font-size: 15px; font-weight: 600; color: var(--text); }
+.meta-v.small { font-size: 13px; font-weight: 500; }
+
+/* ═══════════════════════════════════════════
+   DAY BLOCKS & BORDERS
+═══════════════════════════════════════════ */
+.day-block {
+  background: var(--surface);
+  border: 2px solid var(--border-day);
+  border-radius: 10px;
+  margin-bottom: 28px;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.04);
+  overflow: hidden;
+}
+.day-block.hidden { display: none; }
+
+.day-head {
+  background: #e0e0e0;
+  border-bottom: 2px solid var(--border-day);
+  padding: 14px 20px;
+  display: flex; align-items: center; gap: 16px;
+}
+
+.day-badge {
+  width: 50px; height: 50px; background: #111; color: #fff; border-radius: 8px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  flex-shrink: 0; font-family: 'JetBrains Mono', monospace; font-weight: 700;
+}
+.day-badge .dnum { font-size: 20px; line-height: 1; }
+.day-badge .dword { font-size: 8px; letter-spacing: 1px; opacity: 0.6; text-transform: uppercase; margin-top: 2px; }
+
+.day-title-info { display: flex; flex-direction: column; gap: 4px; }
+.day-title { font-family: 'Space Grotesk', sans-serif; font-size: 17px; font-weight: 700; color: #111; }
+.day-date { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #555; }
+
+/* Desktop standard notes visibility */
+.day-desc {
+  background: #fff;
+  padding: 14px 20px;
+  font-size: 13.5px; color: var(--mid); line-height: 1.75;
+  border-bottom: 2px solid var(--border-day);
+}
+
+/* ═══════════════════════════════════════════
+   STOPS TABLE
+═══════════════════════════════════════════ */
+.stops-wrap { overflow-x: auto; background: var(--surface); width: 100%; -webkit-overflow-scrolling: touch; }
+table.st { width: 100%; min-width: 700px; border-collapse: collapse; font-size: 13px; }
+
+table.st thead tr { background: #f0f0f0; border-bottom: 2px solid var(--border-route); }
+table.st th {
+  font-family: 'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 1.2px;
+  text-transform: uppercase; color: #333; font-weight: 700;
+  padding: 12px 16px; text-align: left; white-space: nowrap;
+  border-right: 1px solid var(--border-column);
+}
+
+table.st tbody tr.sr { background: var(--surface); }
+table.st tbody tr.sr.alt-bg { background: var(--row-alt); }
+table.st tbody tr.xr td { background: var(--surface); }
+table.st tbody tr.xr.alt-bg td { background: var(--row-alt); }
+
+/* Apply Borders */
+table.st td {
+  padding: 12px 16px; vertical-align: top;
+  border-right: 1px solid var(--border-column);
+}
+table.st th:last-child, table.st td:last-child { border-right: none; }
+
+/* Horizontal Route Divider Logic */
+table.st tbody tr.sr td { border-bottom: 1px solid var(--border-route); }
+table.st tbody tr.sr.has-notes td { border-bottom: none; }
+table.st tbody tr.xr td { border-bottom: 1px solid var(--border-route); border-right: none; }
+table.st tbody tr:last-child td { border-bottom: none; }
+
+table.st tr.xr td { padding: 0; }
+.xr-inner { padding: 12px 20px 20px; display: flex; gap: 16px; flex-wrap: wrap; }
+
+.xr-card {
+  flex: 1; min-width: 240px;
+  background: #ffffff; border: 1px solid var(--border-column); border-radius: 8px;
+  padding: 14px 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+.xr-card-title {
+  font-family: 'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 1.5px;
+  text-transform: uppercase; color: #777; margin-bottom: 8px; font-weight: 600;
+}
+.xr-card-content { font-size: 12.5px; color: var(--mid); line-height: 1.65; }
+.xr-card.art-card { border-left: 4px solid #888888; }
+.xr-card.note-card { border-left: 4px solid #bbbbbb; }
+
+.place { font-weight: 700; color: var(--text); font-size: 13.5px; word-break: break-word; }
+.from { font-size: 11.5px; color: var(--dim); margin-top: 3px; display: block; word-break: break-word; }
+.mono { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text); white-space: nowrap; }
+.faint { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #aaa; }
+.tval { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; font-weight: 600; color: var(--text); }
+.tval.absent { color: #aaa; font-weight: 400; }
+
+.mpill {
+  font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600;
+  color: var(--text); background: #eee; border: 1px solid #ccc;
+  border-radius: 5px; padding: 2px 10px; white-space: nowrap; display: inline-block;
+}
+.cpill {
+  font-size: 11px; font-weight: 500; color: var(--mid); background: #f4f4f4;
+  border: 1px solid #ddd;
+  border-radius: 5px; padding: 2px 10px; white-space: nowrap; display: inline-block;
+}
+
+footer {
+  text-align: center; padding: 24px;
+  font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 500;
+  letter-spacing: 1.5px; color: var(--dim); border-top: 1px solid var(--border-route);
+  text-transform: uppercase; background: var(--bg);
+}
+
+/* ═══════════════════════════════════════════
+   CUSTOM DROPDOWN (mobile/tablet only)
+   Replaces native <select> so the popup panel
+   can be positioned with right:0 and never
+   overflow the right edge of the viewport.
+═══════════════════════════════════════════ */
+.cdd-wrap {
+  position: relative;
+  display: none; /* hidden on desktop; shown via media queries below */
+  min-width: 0;
+}
+.cdd-btn {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  cursor: pointer; outline: none; border-radius: 6px;
+  padding: 6px 12px; font-family: 'DM Sans', sans-serif;
+  font-size: 13px; font-weight: 600; width: 100%;
+}
+.cdd-btn-query {
+  color: #111; background: #d0d0d0;
+  border: 1px solid #111;
+}
+.cdd-btn-query:focus { box-shadow: 0 0 0 2px rgba(0,0,0,0.15); }
+.cdd-btn-day {
+  color: #111; background: #f5f5f5; border: 1px solid #aaa;
+}
+.cdd-btn-day:focus { border-color: #111; }
+.cdd-arrow { font-size: 10px; flex-shrink: 0; margin-left: 6px; }
+.cdd-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+
+/* Panel uses fixed positioning so it is never clipped by
+   overflow:hidden on .topbar or .day-block, and always
+   sits above all page content regardless of stacking context. */
+.cdd-panel {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; /* overridden by JS to match button position */
+  min-width: 240px;
+  max-width: calc(100vw - 16px);
+  max-height: 60vh;
+  overflow-y: auto;
+  background: #fff;
+  border: 1.5px solid var(--green-dark);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+  z-index: 99999;
+}
+.cdd-panel.open { display: block; }
+
+/* Query panel specifically: full-width like index.html so all text is visible */
+#cddQueryPanel {
+  left: 0 !important;
+  right: 0 !important;
+  width: 100vw !important;
+  max-width: 100vw !important;
+  border-radius: 0 0 8px 8px;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+}
+#cddQueryPanel .cdd-option {
+  white-space: normal;
+  word-break: break-word;
+}
+
+.cdd-option {
+  padding: 10px 16px;
+  font-family: 'DM Sans', sans-serif; font-size: 13px; color: var(--text);
+  cursor: pointer; white-space: nowrap;
+  border-bottom: 1px solid #f0f0f0;
+}
+.cdd-option:last-child { border-bottom: none; }
+.cdd-option:hover, .cdd-option.selected { background: var(--green-light); color: var(--green-dark); }
+
+/* ═══════════════════════════════════════════
+   RESPONSIVE TABLET LOGIC (<= 820px)
+═══════════════════════════════════════════ */
+.mobile-toggle { display: none; }
+
+@media (max-width: 820px) {
+  /* Enforce single row topbar with flexible elements */
+  .topbar { padding: 10px 12px; gap: 8px; flex-wrap: nowrap; overflow-x: hidden; }
+  .qs-lbl { display: none !important; } 
+  .qs-group { flex: 1 1 0%; min-width: 0; }
+  .day-group { flex: 1 1 0%; min-width: 0; }
+  /* Hide native selects, show custom dropdowns */
+  #querySelect, #daySelect { display: none !important; }
+  .cdd-wrap { display: block; width: 100%; }
+  
+  .mobile-toggle {
+    display: block; width: 100%; text-align: left; padding: 12px 20px;
+    background: #f0f0f0; border: none; font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; font-weight: 600; text-transform: uppercase; color: #111;
+    cursor: pointer; border-bottom: 1px solid var(--border-route);
+  }
+  .mobile-toggle::after { content: ' ▼'; float: right; font-size: 10px; }
+  .open > .mobile-toggle::after { content: ' ▲'; }
+  .mobile-toggle:hover { background: #e6e6e6; }
+  
+  .day-desc-wrap:not(.open) .day-desc { display: none; }
+  .xr-inner-wrap:not(.open) .xr-inner { display: none; }
+  .open > .mobile-toggle { border-bottom: 1px solid var(--border-column); }
+
+  .xr-inner { flex-direction: column; padding: 12px; }
+  .xr-card { min-width: 0; width: 100%; }
+}
+
+/* ═══════════════════════════════════════════
+   RESPONSIVE MOBILE LOGIC (<= 650px)
+═══════════════════════════════════════════ */
+/* ═══════════════════════════════════════════
+   MAP SECTION STYLES
+═══════════════════════════════════════════ */
+.map-section {
+  max-width: 1040px;
+  margin: 0 auto 40px;
+  padding: 0 20px;
+}
+.map-section-card {
+  background: #ffffff;
+  border: 2px solid var(--border-day);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.04);
+}
+.map-section-head {
+  background: #f0f0f0;
+  border-bottom: 2px solid var(--border-day);
+  padding: 14px 20px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap;
+}
+.map-section-title {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 15px; font-weight: 700; color: #111;
+  display: flex; align-items: center; gap: 8px;
+}
+
+.map-expand-btn {
+  position: absolute;
+  bottom: 12px; right: 12px;
+  z-index: 400;
+  font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700;
+  color: var(--green-dark); background: rgba(255,255,255,0.93);
+  border: 1px solid var(--green-dark); border-radius: 6px;
+  padding: 5px 12px; cursor: pointer; white-space: nowrap;
+  transition: all .2s; flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+}
+.map-expand-btn:hover { background: var(--green-light); }
+
+#embeddedMapWrap {
+  position: relative;
+  min-height: 420px;
+  background: #e8e8e8;
+}
+#embeddedMap { width: 100%; height: 420px; z-index: 1; display: block; }
+
+#embTooltipBox {
+  position: absolute; z-index: 600;
+  background: rgba(255,255,255,0.97); border: 1px solid #ccc;
+  border-radius: 8px; padding: 12px 14px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  max-width: 260px; pointer-events: auto; display: none;
+  font-size: 11px; line-height: 1.5;
+}
+#embTooltipBox b { color: var(--green-dark); font-size: 13px; font-family: 'Space Grotesk', sans-serif; }
+.tt-row { display: flex; gap: 6px; margin-top: 2px; }
+.tt-label { color: #888; min-width: 60px; font-size: 10px; font-family: 'JetBrains Mono', monospace; }
+.tt-val { color: #333; font-size: 10px; font-family: 'JetBrains Mono', monospace; }
+.diary-scroll { max-height: 30vh; overflow-y: auto; padding-right: 4px; scrollbar-width: thin; scrollbar-color: var(--green-dark) transparent; }
+.diary-scroll::-webkit-scrollbar { width: 4px; }
+.diary-scroll::-webkit-scrollbar-thumb { background: var(--green-dark); border-radius: 4px; }
+
+.map-no-data {
+  display: flex; align-items: center; justify-content: center;
+  color: #888; font-size: 13px; height: 200px; flex-direction: column; gap: 8px;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Map modal (fullscreen) */
+#mapModal {
+  display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(0,0,0,0.85); z-index: 99999; flex-direction: column;
+}
+#mapModalInner { flex: 1; display: flex; flex-direction: column; width: 100%; height: 100%; position: relative; }
+#mapModalHeader {
+  background: #fff; border-bottom: 2px solid var(--border-day);
+  padding: 10px 16px; display: flex; align-items: center; justify-content: space-between;
+  flex-shrink: 0;
+}
+#mapModalTitle { font-family: 'Space Grotesk', sans-serif; font-size: 14px; font-weight: 700; color: #111; }
+#mapModalClose {
+  font-size: 22px; color: #666; cursor: pointer; line-height: 1;
+  background: none; border: none; padding: 0 4px; transition: color 0.2s;
+}
+#mapModalClose:hover { color: #111; }
+#mapModalToolbar {
+  background: #f5f5f5; padding: 8px 14px; display: flex; align-items: center; gap: 8px;
+  border-bottom: 2px solid var(--border-day); flex-shrink: 0; flex-wrap: wrap;
+}
+#mapModalToolbarLabel { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: 1px; }
+.modal-day-btn {
+  padding: 4px 12px; border-radius: 4px; border: 1px solid #aaa; background: #fff;
+  font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600;
+  cursor: pointer; color: #555; transition: all .15s; white-space: nowrap;
+}
+.modal-day-btn:hover { border-color: var(--green-dark); color: var(--green-dark); }
+.modal-day-btn.active { border-color: var(--green-dark); background: var(--green-light); color: var(--green-dark); }
+.modal-day-btn.all-btn.active { border-color: #111; background: #111; color: #fff; }
+#mapModalDaySelect { display: none; }
+#fullscreenMap { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
+#mapModalLegend {
+  position: absolute; bottom: 20px; right: 10px;
+  background: rgba(255,255,255,0.95); border: 1px solid #ccc;
+  border-radius: 8px; padding: 8px 10px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.12); z-index: 1000;
+  max-height: 50vh; overflow-y: auto; min-width: 90px;
+}
+#mapModalLegend h4 {
+  font-family: 'JetBrains Mono', monospace; font-size: 9px; font-weight: 700;
+  color: #777; text-transform: uppercase; letter-spacing: 1px;
+  margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid #e0e0e0;
+}
+.modal-leg-item { cursor: pointer; border-radius: 3px; padding: 3px 6px; display: flex; align-items: center; gap: 6px; }
+.modal-leg-item:hover { background: #f5f5f5; }
+.modal-leg-item.active { background: var(--green-light); }
+.modal-leg-item span { font-size: 11px; color: #555; font-family: 'JetBrains Mono', monospace; }
+.modal-icon-row { display: flex; align-items: center; gap: 4px; margin-top: 6px; padding-top: 6px; border-top: 1px solid #e0e0e0; }
+.modal-icon-row span { font-size: 10px; color: #888; font-family: 'JetBrains Mono', monospace; }
+#mapTooltipBox {
+  position: absolute; z-index: 2000;
+  background: rgba(255,255,255,0.97); border: 1px solid #ccc;
+  border-radius: 8px; padding: 10px 12px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  max-width: 280px; pointer-events: auto; display: none;
+  font-size: 12px; line-height: 1.5;
+}
+#mapTooltipBox b { color: var(--green-dark); font-size: 13px; font-family: 'Space Grotesk', sans-serif; }
+
+@media (max-width: 768px) {
+  #mapModalDayBtns { display: none !important; }
+  #mapModalDaySelect {
+    display: block;
+    appearance: none; -webkit-appearance: none;
+    background: #f5f5f5 url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1.41 0.59L6 5.17L10.59 0.59L12 2L6 8L0 2L1.41 0.59Z' fill='%234a4a4a'/%3E%3C/svg%3E") no-repeat right 10px center;
+    border: 1px solid #aaa; border-radius: 6px; color: #111;
+    font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 600;
+    padding: 6px 32px 6px 12px; cursor: pointer; outline: none; min-width: 140px;
+  }
+  #embTooltipBox, #mapTooltipBox { max-width: 200px !important; font-size: 10px !important; padding: 8px 10px !important; }
+  #embTooltipBox b, #mapTooltipBox b { font-size: 11px !important; }
+  .diary-scroll { max-height: 22vh; }
+  .tt-label { min-width: 48px; font-size: 9px; }
+  .tt-val { font-size: 9px; }
+  #embeddedMapWrap { min-height: 300px; }
+  #embeddedMap { height: 300px; }
+}
+
+@media (max-width: 650px) {
+  .map-section { padding: 0 10px; }
+  #embeddedMapWrap { min-height: 260px; }
+  #embeddedMap { height: 260px; }
+  .map-expand-btn { font-size: 10px; padding: 4px 10px; }
+}
+
+/* ═══════════════════════════════════════════
+   END MAP SECTION STYLES
+═══════════════════════════════════════════ */
+
+@media (max-width: 650px) {
+  /* Topbar restructured for Mobile using minmax to contain dropdown overflows */
+  .topbar {
+    display: grid;
+    /* Row 1: logo(36px) | query-select(rest)
+       Row 2: day-select(auto) | nav-buttons(auto) — both auto so day gets real space */
+    grid-template-columns: 36px minmax(0, 1fr); 
+    grid-template-rows: auto auto;
+    gap: 12px;
+    padding: 12px 14px;
+    overflow-x: hidden;
+  }
+  .bar-sep { display: none; }
+
+  /* Row 1: Logo (Left) */
+  .logo-area { 
+    grid-column: 1; grid-row: 1; 
+    justify-content: flex-start; 
+    margin-bottom: 0; 
+    width: 36px;
+    overflow: hidden;
+  }
+  .brand { display: none !important; } 
+  
+  /* Row 1: Query Select (Right - fully stretched) */
+  .qs-group { 
+    grid-column: 2; grid-row: 1; 
+    width: 100%; 
+    min-width: 0; 
+    display: flex; 
+    justify-content: flex-end;
+  }
+  .qs-group .qs-lbl { display: none !important; }
+  
+  #querySelect { 
+    display: none !important;
+  }
+  .qs-group .cdd-wrap {
+    width: 87%;
+    max-width: 100%;
+  }
+
+  /* Row 2: Day Select + Nav — span the full width as a flex row */
+  .day-group { 
+    grid-column: 1 / 2; grid-row: 2;
+    justify-content: flex-start; 
+    min-width: 0;
+  }
+  .day-group .cdd-wrap {
+    width: 100%;
+    min-width: 110px;
+  }
+  #daySelect { 
+    width: 100%; max-width: none; min-width: 130px; box-sizing: border-box; 
+  }
+  
+  .nav-group { 
+    grid-column: 2 / 3; grid-row: 2; 
+    justify-content: flex-end; 
+    min-width: 0;
+  }
+  
+  /* Box Adjustments */
+  .content { padding: 16px 10px 60px; }
+  
+  /* Reduce Meta box sizes for mobile */
+  .query-card-body { grid-template-columns: 1fr; }
+  .query-right { border-top: 2px solid var(--green-border); border-left: none; padding: 16px; }
+  .meta-grid { flex-direction: row; flex-wrap: wrap; gap: 8px; }
+  .meta-item { flex: 1; min-width: 70px; padding: 8px 10px; gap: 2px; }
+  .meta-k { font-size: 8px; }
+  .meta-v { font-size: 12px; }
+  .meta-v.small { font-size: 11px; }
+  
+  /* Align Day Header perfectly */
+  .day-head { flex-wrap: nowrap; padding: 12px 10px; gap: 12px; }
+  .day-badge { width: 44px; height: 44px; }
+  .day-badge .dnum { font-size: 18px; }
+  .day-title { font-size: 15px; }
+  
+  /* ============================================================
+     NO-SCROLL MOBILE TABLE (Stacking rows into visual blocks)
+     ============================================================ */
+  .stops-wrap { overflow-x: hidden; }
+  table.st { min-width: 100%; }
+  table.st thead { display: none; }
+  table.st, table.st tbody, table.st tr, table.st td { display: block; width: 100%; box-sizing: border-box; }
+  
+  table.st tr.sr { margin-bottom: 0; }
+  
+  /* Each cell becomes a flex row */
+  table.st td { 
+    display: flex; align-items: flex-start; justify-content: space-between; 
+    text-align: right; padding: 10px 14px; 
+    border-bottom: 1px solid var(--border-column); 
+    border-right: none; 
+  }
+  table.st td::before { 
+    content: attr(data-label); 
+    font-family: 'JetBrains Mono', monospace; 
+    font-size: 10px; font-weight: 700; color: #555; 
+    text-transform: uppercase; margin-right: 12px; 
+    white-space: nowrap; flex-shrink: 0;
+  }
+  
+  /* Route formatting perfectly handled on right side */
+  .route-right {
+    display: flex; flex-direction: column; align-items: flex-end; text-align: right; word-break: break-word;
+  }
+  
+  /* Border cleanup for stacked layout */
+  table.st tr.sr td:last-child { border-bottom: 1px solid var(--border-route); }
+  table.st tr.sr.has-notes td:last-child { border-bottom: none; }
+  table.st tr.xr td { border-bottom: 1px solid var(--border-route) !important; padding: 0; display: block; }
+  table.st tr.xr td::before { display: none; }
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="logo-area">
+    <img class="logo-img" id="logoImg" src="images/logo.png" alt="MUST Travel"
+         onerror="this.style.display='none';document.getElementById('logoFb').style.display='flex';">
+    <div class="logo-fb" id="logoFb" style="display:none;">M</div>
+    <div class="brand">MUST Travel</div>
+  </div>
+
+  <div class="bar-sep"></div>
+
+  <div class="qs-group">
+    <span class="qs-lbl">Query</span>
+    <select id="querySelect"></select>
+    <div class="cdd-wrap" id="cddQueryWrap">
+      <button class="cdd-btn cdd-btn-query" id="cddQueryBtn" type="button" onclick="cddToggle('query')">
+        <span class="cdd-label" id="cddQueryLabel">Loading…</span>
+        <span class="cdd-arrow">▼</span>
+      </button>
+      <div class="cdd-panel" id="cddQueryPanel"></div>
+    </div>
+  </div>
+
+  <div class="bar-sep"></div>
+
+  <div class="nav-group">
+    <button class="nav-btn" onclick="shiftQuery(-1)">&#9664; Prev</button>
+    <button class="nav-btn" onclick="shiftQuery(1)">Next &#9654;</button>
+  </div>
+
+  <div class="bar-sep"></div>
+
+  <div class="day-group">
+    <span class="qs-lbl">Day</span>
+    <select id="daySelect" onchange="filterDay(this.value)">
+      <option value="all">All Days</option>
+    </select>
+    <div class="cdd-wrap" id="cddDayWrap">
+      <button class="cdd-btn cdd-btn-day" id="cddDayBtn" type="button" onclick="cddToggle('day')">
+        <span class="cdd-label" id="cddDayLabel">All Days</span>
+        <span class="cdd-arrow">▼</span>
+      </button>
+      <div class="cdd-panel" id="cddDayPanel"></div>
+    </div>
+  </div>
+</header>
+
+<div id="loaderEl">
+  <div class="loader-ring"></div>
+  <span>Loading&hellip;</span>
+</div>
+
+<div id="mainWrap" style="display:none;">
+  <div class="content">
+    <div id="queryHeader"></div>
+    <div class="query-divider"></div>
+    <div id="tlView"></div>
+  </div>
+</div>
+
+<!-- ═══ ROUTE MAP SECTION ═══ -->
+<div id="mapSection" style="display:none;">
+  <div class="map-section">
+    <div class="map-section-card">
+      <div class="map-section-head">
+        <div class="map-section-title">Route Map</div>
+      </div>
+      <div id="embeddedMapWrap">
+        <div id="embeddedMap"></div>
+        <div id="embTooltipBox"
+             onmouseenter="if(typeof tooltipTimeout!=='undefined')clearTimeout(tooltipTimeout);"
+             onmouseleave="hideTooltip(embMap)"></div>
+        <button class="map-expand-btn" onclick="openMapModal()">&#9862; Expand</button>
+        <div id="mapNoData" class="map-no-data" style="display:none;">
+          <span style="font-size:32px">&#9632;</span>
+          <span>Map data not available</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ FULLSCREEN MAP MODAL ═══ -->
+<div id="mapModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:99999;flex-direction:column;">
+  <div id="mapModalInner" style="flex:1;display:flex;flex-direction:column;width:100%;height:100%;position:relative;">
+    <div id="mapModalHeader">
+      <div>
+        <div id="mapModalTitle">Itinerary Route Map</div>
+        <div id="mapModalSub" style="font-size:11px;color:#888;margin-top:2px;font-family:'JetBrains Mono',monospace;"></div>
+      </div>
+      <button id="mapModalClose" onclick="closeMapModal()">&#10005;</button>
+    </div>
+    <div id="mapModalToolbar">
+      <span id="mapModalToolbarLabel">Days:</span>
+      <div id="mapModalDayBtns" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
+      <select id="mapModalDaySelect" onchange="updateMapForDay(this.value==='all'?'all':+this.value)"></select>
+    </div>
+    <div style="flex:1;position:relative;overflow:hidden;min-height:0;">
+      <div id="fullscreenMap" style="width:100%;height:100%;"></div>
+      <div id="mapModalLegend">
+        <h4>Days</h4>
+        <div id="mapModalLegItems"></div>
+        <div class="modal-icon-row"><span>&#9632;</span><span>Hotel</span></div>
+        <div class="modal-icon-row"><span>&#9650;</span><span>Station</span></div>
+        <div class="modal-icon-row"><span>&#9992;</span><span>Airport</span></div>
+        <div class="modal-icon-row"><span>&#9679;</span><span>Place</span></div>
+      </div>
+      <div id="mapTooltipBox"
+           onmouseenter="if(typeof tooltipTimeout!=='undefined')clearTimeout(tooltipTimeout);"
+           onmouseleave="hideTooltip(fsMap)"></div>
+    </div>
+  </div>
+</div>
+
+<footer>&copy; MUST Research 2026 &nbsp;&middot;&nbsp; MUST Travel</footer>
+
+<script>
+/* ── UTILS ── */
+function esc(s){ if(s===null||s===undefined)return''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function fdur(min){
+  if(!min||min<=0)return'—';
+  const h=Math.floor(min/60),m=min%60;
+  if(h===0)return m+'m'; if(m===0)return h+'h'; return h+'h '+m+'m';
+}
+function ftime(t){
+  if(!t)return null;
+  const p=String(t).split(':'); if(p.length<2)return String(t);
+  const hr=parseInt(p[0]),mn=p[1];
+  return(hr%12||12)+':'+mn+' '+(hr>=12?'PM':'AM');
+}
+function parseDateStr(str){
+  if(!str)return null;
+  const p=String(str).split('-');
+  if(p.length===3)return new Date(p[2],parseInt(p[1])-1,p[0]);
+  return new Date(str);
+}
+function fdate(startDate,dayNum){
+  if(!startDate)return'';
+  try{
+    const dt=parseDateStr(startDate); if(!dt||isNaN(dt))return'';
+    dt.setDate(dt.getDate()+dayNum-1);
+    return dt.toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short'});
+  }catch(e){return'';}
+}
+function fdateRange(s,e){
+  if(!s||!e)return'—';
+  const sd=parseDateStr(s),ed=parseDateStr(e);
+  if(!sd||isNaN(sd)||!ed||isNaN(ed))return'—';
+  const mo=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return sd.getDate()+' '+mo[sd.getMonth()]+' – '+ed.getDate()+' '+mo[ed.getMonth()]+' '+ed.getFullYear();
+}
+
+function extractTags(val){
+  let res=[];
+  if(!val)return res;
+  if(typeof val==='string'){
+    try{const p=JSON.parse(val);if(typeof p==='object'&&p!==null)return extractTags(p);}catch(e){}
+    val.split(',').forEach(p=>{const c=p.replace(/[\[\]"']/g,'').trim();if(c)res.push(c);});
+    return res;
+  }
+  if(Array.isArray(val)){val.forEach(v=>{res=res.concat(extractTags(v));});return res;}
+  if(typeof val==='object'){Object.values(val).forEach(v=>{res=res.concat(extractTags(v));});return res;}
+  res.push(String(val).trim()); return res.filter(Boolean);
+}
+
+const CM={
+  hotel:{l:'Accommodation'},nature_ecotourism:{l:'Nature & Eco'},religious_spiritual:{l:'Spiritual'},
+  urban_city:{l:'Urban / City'},hill_stations:{l:'Hill Station'},wildlife_safari:{l:'Wildlife Safari'},
+  beach_destinations:{l:'Beach'},airport:{l:'Airport'},arts_crafts_culture:{l:'Arts & Crafts'},
+  festivals_events:{l:'Festival / Event'},station:{l:'Transit'},cultural_heritage:{l:'Cultural Heritage'},
+};
+function cmLabel(cat){return cat?(CM[cat]?CM[cat].l:cat.replace(/_/g,' ')):'—';}
+const MI={car:'',train:'',flight:'',bus:'',boat:'',walk:'',auto:'',walking:''};
+function mi(m){return MI[(m||'').toLowerCase()]||'';}
+
+/* ── STATE ── */
+const state={data:{},qid:null,availableQids:[]};
+
+/* ── LOAD ── */
+async function loadAllQueries(){
+  const available=[],promises=[];
+  for(let i=1;i<=100;i++){
+    const qid=String(i);
+    promises.push(
+      fetch('queries/Phase3_Summary_'+qid+'_output.json')
+        .then(r=>{if(r.ok)return r.json().then(d=>{state.data[qid]=d;available.push(qid);});})
+        .catch(()=>{})
+    );
+  }
+  await Promise.all(promises);
+  state.availableQids=available.sort((a,b)=>+a-+b);
+  return state.availableQids;
+}
+
+/* ── RENDER HEADER ── */
+function renderHeader(data,qid){
+  const el=document.getElementById('queryHeader');
+  if(!data){el.innerHTML='<div class="err-note">No data.</div>';return;}
+
+  const tagFields=[
+    {label:'Places',    val:data.places},
+    {label:'Interests', val:data.interests},
+    {label:'Intent',    val:data.intent},
+    {label:'Emotions',  val:data.emotions||data.emotion},
+    {label:'Modes',     val:data.travel_modes||data.travel_mode},
+    {label:'Requests',  val:data.requests||data.request},
+  ];
+
+  let tagHtml='<div class="tag-rows">';
+  tagFields.forEach(tf=>{
+    const tags=extractTags(tf.val).slice(0,10);
+    if(!tags.length)return;
+    tagHtml+='<div class="tag-row"><span class="tag-key">'+tf.label+'</span><div class="tag-vals">';
+    tagHtml+=tags.map(t=>'<span class="tag">'+esc(t)+'</span>').join('');
+    tagHtml+='</div></div>';
+  });
+  tagHtml+='</div>';
+
+  const metaRows=[
+    ['Duration', esc(data.duration_days||'—')+' days'],
+    ['Travelers', data.travelers===1?'Solo':esc(data.travelers||'—')],
+    ['Dates', '<span class="small">'+fdateRange(data.start_date,data.end_date)+'</span>'],
+  ];
+  let metaHtml='<div class="meta-grid">';
+  metaRows.forEach(([k,v])=>{
+    metaHtml+='<div class="meta-item"><span class="meta-k">'+k+'</span><span class="meta-v">'+v+'</span></div>';
+  });
+  metaHtml+='</div>';
+
+  let leftHtml='';
+  if(data.query){
+    leftHtml+='<span class="qlabel">Query</span>';
+    leftHtml+='<div class="query-original">'+esc(data.query)+'</div>';
+  }
+  if(data.query_summary&&data.query_summary!==data.query){
+    leftHtml+='<span class="qlabel">Query Summary</span>';
+    leftHtml+='<div class="query-summ">'+esc(data.query_summary)+'</div>';
+  }
+  leftHtml+=tagHtml;
+
+  el.innerHTML=
+    '<div class="query-card">'
+    +'<div class="query-card-head">'
+    +'<span class="qid-lbl">Query #'+esc(data.query_id||qid)+'</span>'
+    +'<span class="q-heading">'+esc(data.heading||'Travel Plan')+'</span>'
+    +'</div>'
+    +'<div class="query-card-body">'
+    +'<div class="query-left">'+leftHtml+'</div>'
+    +'<div class="query-right">'+metaHtml+'</div>'
+    +'</div>'
+    +'</div>';
+}
+
+/* ── RENDER DAY SELECT ── */
+function renderDaySelect(data){
+  const sel=document.getElementById('daySelect');
+  sel.innerHTML='<option value="all">All Days</option>';
+  if(!data)return;
+  (data.route||[]).forEach((dayObj,idx)=>{
+    const segs=dayObj.segments||[];
+    const d=dayObj.narrative?dayObj.narrative.day:(segs[0]?segs[0].day:idx+1);
+    const ds=fdate(data.start_date,+d);
+    const opt=document.createElement('option');
+    opt.value=String(d);
+    opt.textContent='Day '+d+(ds?' — '+ds:'');
+    sel.appendChild(opt);
+  });
+  sel.value='all';
+}
+
+/* ── RENDER TIMELINE ── */
+function renderTimeline(data){
+  const container=document.getElementById('tlView');
+  if(!data||!data.route){container.innerHTML='<div class="err-note">No route data.</div>';return;}
+
+  let html='';
+
+  (data.route||[]).forEach((dayObj,idx)=>{
+    const segs =dayObj.segments||[];
+    const d    =dayObj.narrative?dayObj.narrative.day:(segs[0]?segs[0].day:idx+1);
+    const ds   =fdate(data.start_date,+d);
+    const title=(dayObj.narrative&&dayObj.narrative.summary)?dayObj.narrative.summary:'Day '+d;
+    const desc =(dayObj.narrative&&dayObj.narrative.description)?dayObj.narrative.description:'';
+
+    html+='<div class="day-block" data-day="'+d+'">';
+
+    html+='<div class="day-head">'
+        +'<div class="day-badge"><div class="dnum">'+d+'</div><div class="dword">Day</div></div>'
+        +'<div class="day-title-info">'
+        +'<div class="day-title">'+esc(title)+'</div>'
+        +(ds?'<div class="day-date">'+esc(ds)+'</div>':'')
+        +'</div></div>';
+
+    if(desc) {
+      html+='<div class="day-desc-wrap">'
+          +'<button class="mobile-toggle" onclick="this.parentElement.classList.toggle(\'open\')">Expand</button>'
+          +'<div class="day-desc">'+esc(desc)+'</div>'
+          +'</div>';
+    }
+
+    html+='<div class="stops-wrap"><table class="st">';
+    html+='<thead><tr>'
+        +'<th>Arrival</th>'
+        +'<th>Departure</th>'
+        +'<th>Route</th>'
+        +'<th>Mode</th>'
+        +'<th>Distance</th>'
+        +'<th>Travel</th>'
+        +'<th>Stay</th>'
+        +'<th>Category</th>'
+        +'</tr></thead><tbody>';
+
+    segs.forEach((stop, sIdx)=>{
+      const depT =ftime(stop.end_time);
+      const arrT =ftime(stop.arrival_time);
+      const tMin =stop.travel_time_min||stop.travel_duration_min||0;
+      const vMin =stop.visit_duration_min||0;
+      const dist =stop.distance_km||0;
+      const hasNotes=stop.notes&&stop.notes.trim();
+      const hasArt  =stop.local_art&&stop.local_art.trim();
+      const hasExtra = hasNotes || hasArt;
+
+      const isAlt = sIdx % 2 !== 0;
+      const altCls = isAlt ? ' alt-bg' : '';
+      const notesCls = hasExtra ? ' has-notes' : '';
+
+      /* Added data-label to all <td> tags for the mobile responsive table logic */
+      html+='<tr class="sr' + notesCls + altCls + '">';
+      html+='<td data-label="Arrival"><span class="tval'+(arrT?'':' absent')+'">'+(arrT?esc(arrT):'—')+'</span></td>';
+      html+='<td data-label="Departure"><span class="tval'+(depT?'':' absent')+'">'+(depT?esc(depT):'—')+'</span></td>';
+      html+='<td data-label="Route"><div class="route-right">';
+      if(stop.start_place&&stop.end_place){
+        html+='<span class="from">From: '+esc(stop.start_place)+'</span>'
+            +'<div class="place">'+esc(stop.end_place)+'</div>';
+      } else {
+        html+='<span class="place">'+esc(stop.end_place||'—')+'</span>';
+      }
+      html+='</div></td>';
+      html+='<td data-label="Mode">'+(stop.travel_mode?'<span class="mpill">'+esc(stop.travel_mode)+'</span>':'<span class="faint">—</span>')+'</td>';
+      html+='<td data-label="Distance"><span class="'+(dist>0?'mono':'faint')+'">'+(dist>0?dist+' km':'—')+'</span></td>';
+      html+='<td data-label="Travel"><span class="'+(tMin>0?'mono':'faint')+'">'+(tMin>0?fdur(tMin):'—')+'</span></td>';
+      html+='<td data-label="Stay"><span class="'+(vMin>0?'mono':'faint')+'">'+(vMin>0?fdur(vMin):'—')+'</span></td>';
+      html+='<td data-label="Category"><span class="cpill">'+esc(cmLabel(stop.category))+'</span></td>';
+      html+='</tr>';
+
+      if(hasExtra){
+        html+='<tr class="xr' + altCls + '"><td colspan="8">'
+            +'<div class="xr-inner-wrap">'
+            +'<button class="mobile-toggle" onclick="this.parentElement.classList.toggle(\'open\')">Expand</button>'
+            +'<div class="xr-inner">';
+        if(hasNotes) {
+          html+='<div class="xr-card note-card">'
+              +'<div class="xr-card-title">Activity & Notes</div>'
+              +'<div class="xr-card-content">'+esc(stop.notes.trim())+'</div>'
+              +'</div>';
+        }
+        if(hasArt) {
+          html+='<div class="xr-card art-card">'
+              +'<div class="xr-card-title">Local Art & Culture</div>'
+              +'<div class="xr-card-content">'+esc(stop.local_art.trim())+'</div>'
+              +'</div>';
+        }
+        html+='</div></div></td></tr>';
+      }
+    });
+
+    html+='</tbody></table></div></div>';
+  });
+
+  container.innerHTML=html;
+}
+
+/* ── FILTER ── */
+function filterDay(val){
+  document.querySelectorAll('.day-block').forEach(el=>{
+    el.classList.toggle('hidden',val!=='all'&&el.dataset.day!==String(val));
+  });
+  // Also sync the map with the selected day
+  if(typeof updateMapForDay === 'function'){
+    updateMapForDay(val === 'all' ? 'all' : +val);
+  }
+}
+
+/* ── SWITCH QUERY ── */
+function switchQuery(qid){
+  state.qid=qid;
+  const sel=document.getElementById('querySelect');
+  if(sel)sel.value=qid;
+  cddSyncQuerySelected(qid);
+  const data=state.data[qid];
+  if(!data){
+    document.getElementById('loaderEl').style.display='flex';
+    document.getElementById('loaderEl').innerHTML='<div class="err-note">Could not load Query '+qid+'.</div>';
+    document.getElementById('mainWrap').style.display='none';
+    return;
+  }
+  document.getElementById('loaderEl').style.display='none';
+  document.getElementById('mainWrap').style.display='';
+  renderHeader(data,qid);
+  renderDaySelect(data);
+  cddBuildDayPanel(data);
+  renderTimeline(data);
+  window.scrollTo({top:0,behavior:'instant'});
+}
+
+function shiftQuery(dir){
+  const idx=state.availableQids.indexOf(state.qid);
+  if(idx===-1)return;
+  const next=idx+dir;
+  if(next>=0&&next<state.availableQids.length)switchQuery(state.availableQids[next]);
+}
+
+/* ── CUSTOM DROPDOWNS (mobile/tablet) ── */
+function cddPositionPanel(panel, btn) {
+  const rect = btn.getBoundingClientRect();
+  // Query panel: full-width flush below the topbar (like index.html)
+  if (panel.id === 'cddQueryPanel') {
+    const topbar = document.querySelector('.topbar');
+    const topbarBottom = topbar ? topbar.getBoundingClientRect().bottom : rect.bottom + 4;
+    panel.style.top   = topbarBottom + 'px';
+    panel.style.left  = '0';
+    panel.style.right = '0';
+    panel.style.width = '100vw';
+    return;
+  }
+  // Day panel: keep original positional logic
+  const panelWidth = Math.min(Math.max(rect.width, 240), window.innerWidth - 16);
+  let rightEdge = window.innerWidth - rect.right;
+  let leftEdge = rect.right - panelWidth;
+  if (leftEdge < 8) { leftEdge = 8; rightEdge = window.innerWidth - leftEdge - panelWidth; }
+  panel.style.top  = (rect.bottom + 4) + 'px';
+  panel.style.right = Math.max(0, rightEdge) + 'px';
+  panel.style.left  = 'auto';
+  panel.style.width = panelWidth + 'px';
+}
+
+function cddToggle(which){
+  const panel  = document.getElementById(which==='query' ? 'cddQueryPanel' : 'cddDayPanel');
+  const btn    = document.getElementById(which==='query' ? 'cddQueryBtn'   : 'cddDayBtn');
+  const other  = document.getElementById(which==='query' ? 'cddDayPanel'   : 'cddQueryPanel');
+  other.classList.remove('open');
+  const opening = !panel.classList.contains('open');
+  panel.classList.toggle('open');
+  if (opening) cddPositionPanel(panel, btn);
+}
+
+// Close custom dropdowns when clicking outside
+document.addEventListener('click', function(e){
+  if(!e.target.closest('#cddQueryWrap')) document.getElementById('cddQueryPanel').classList.remove('open');
+  if(!e.target.closest('#cddDayWrap'))   document.getElementById('cddDayPanel').classList.remove('open');
+});
+
+function cddSetQueryLabel(text){
+  const el = document.getElementById('cddQueryLabel');
+  if(el) el.textContent = text;
+}
+
+function cddBuildQueryPanel(available){
+  const panel = document.getElementById('cddQueryPanel');
+  if(!panel) return;
+  panel.innerHTML = '';
+  available.forEach(qid => {
+    const d = state.data[qid];
+    const label = (d&&d.heading)?d.heading:'Travel Plan';
+    const div = document.createElement('div');
+    div.className = 'cdd-option';
+    div.dataset.value = qid;
+    div.textContent = 'Query '+qid+' — '+label;
+    div.onclick = function(){
+      switchQuery(qid);
+      panel.classList.remove('open');
+    };
+    panel.appendChild(div);
+  });
+}
+
+function cddSyncQuerySelected(qid){
+  document.querySelectorAll('#cddQueryPanel .cdd-option').forEach(el=>{
+    el.classList.toggle('selected', el.dataset.value===String(qid));
+  });
+  const d = state.data[qid];
+  const label = (d&&d.heading)?d.heading:'Travel Plan';
+  cddSetQueryLabel('Query '+qid+' — '+label);
+}
+
+function cddBuildDayPanel(data){
+  const panel = document.getElementById('cddDayPanel');
+  if(!panel) return;
+  panel.innerHTML = '';
+  // "All Days" option
+  const allDiv = document.createElement('div');
+  allDiv.className = 'cdd-option selected';
+  allDiv.dataset.value = 'all';
+  allDiv.textContent = 'All Days';
+  allDiv.onclick = function(){
+    cddSelectDay('all', 'All Days');
+    panel.classList.remove('open');
+  };
+  panel.appendChild(allDiv);
+
+  if(!data) return;
+  (data.route||[]).forEach((dayObj,idx)=>{
+    const segs = dayObj.segments||[];
+    const d = dayObj.narrative?dayObj.narrative.day:(segs[0]?segs[0].day:idx+1);
+    const ds = fdate(data.start_date,+d);
+    const text = 'Day '+d+(ds?' — '+ds:'');
+    const div = document.createElement('div');
+    div.className = 'cdd-option';
+    div.dataset.value = String(d);
+    div.textContent = text;
+    div.onclick = function(){
+      cddSelectDay(String(d), text);
+      panel.classList.remove('open');
+    };
+    panel.appendChild(div);
+  });
+}
+
+function cddSelectDay(val, label){
+  document.querySelectorAll('#cddDayPanel .cdd-option').forEach(el=>{
+    el.classList.toggle('selected', el.dataset.value===val);
+  });
+  const lbl = document.getElementById('cddDayLabel');
+  if(lbl) lbl.textContent = label;
+  // Also sync native select and trigger filter
+  const sel = document.getElementById('daySelect');
+  if(sel) sel.value = val;
+  filterDay(val);
+}
+
+
+/* ── MAP STATE ── */
+let embMap = null, embDayLayers = {}, embLabelLayers = {}, embArrowLayers = {}, embAllDays = [];
+let fsMap  = null, fsDayLayers  = {}, fsLabelLayers  = {}, fsArrowLayers  = {}, fsAllDays  = [];
+let embMapReady = false, fsMapReady = false;
+let currentMapMode = 'all';
+let daysDataCache = {};
+
+const DAY_COLOR_PALETTE = [
+  '#e63030', // red
+  '#f27020', // orange
+  '#e8b800', // yellow
+  '#4caf30', // green
+  '#00b09b', // teal
+  '#0099cc', // sky blue
+  '#1a56db', // blue
+  '#7c3aed', // violet
+  '#c026a0', // magenta
+  '#e63060', // rose-red (loops back toward red)
+  '#f05a00', // deep orange
+  '#c9b800', // olive yellow
+  '#2e8b57', // sea green
+  '#008fa8', // cyan-teal
+  '#2563eb', // cobalt
+];
+function getDayColor(idx){return DAY_COLOR_PALETTE[idx%DAY_COLOR_PALETTE.length]}
+
+function flatR(route){return(route||[]).reduce((a,c)=>a.concat(c.segments||[]),[])}
+function gbd(route){const d={};(route||[]).forEach(s=>{if(!d[s.day])d[s.day]=[];d[s.day].push(s)});return d}
+
+function buildDaysData(data){
+  const route=flatR(data.route);const byDay=gbd(route);const result={};
+  Object.keys(byDay).sort((a,b)=>+a-+b).forEach((d,idx)=>{
+    const stops=byDay[d];const color=getDayColor(idx);
+    const segs=stops.map(s=>({
+      slat:s.start_lat,slon:s.start_lon,elat:s.end_lat,elon:s.end_lon,
+      name:s.end_place||'',cat:s.category||'',start_time:s.start_time||'',
+      arr_time:s.arrival_time||'',end_time:s.end_time||'',mode:s.travel_mode||'',
+      travel_min:s.travel_time_min||0,dist_km:s.distance_km||0,
+      visit_min:s.visit_duration_min||0,notes:s.notes||''
+    }));
+    result[+d]={color,segs};
+  });
+  return result;
+}
+
+function catSymbol(cat){if(cat==='hotel')return'■';if(cat==='airport')return'✈';if(cat==='station')return'▲';return'●'}
+function catColor(cat,dc){if(['hotel','airport','station'].includes(cat))return'#fff';return dc}
+function catBorder(cat){return['hotel','airport','station'].includes(cat)?'#333':'#fff'}
+
+function makeDivIcon(cat,color){
+  const sym=catSymbol(cat);const fill=catColor(cat,color);const bdr=catBorder(cat);
+  return L.divIcon({
+    html:`<div style="background:${fill};border:2px solid ${bdr};border-radius:${cat==='hotel'?'3px':'50%'};width:12px;height:12px;display:flex;align-items:center;justify-content:center;font-size:8px;color:#333;box-shadow:0 1px 4px rgba(0,0,0,0.3);">${sym}</div>`,
+    iconSize:[12,12],iconAnchor:[6,6],className:''
+  });
+}
+function makeLabelIcon(name,color){
+  const lbl=name.length>18?name.substring(0,16)+'…':name;
+  return L.divIcon({
+    html:`<div style="background:rgba(255,255,255,0.95);border:1px solid ${color};border-radius:4px;padding:2px 6px;font-size:10px;font-weight:600;color:#111;white-space:nowrap;width:max-content;box-shadow:0 1px 4px rgba(0,0,0,0.15);font-family:'JetBrains Mono',monospace;transform:translate(-50%,-50%);">${lbl}</div>`,
+    iconSize:[0,0],iconAnchor:[0,0],className:''
+  });
+}
+
+function getBoundsForDay(daysData,d){const segs=(daysData[d]||{segs:[]}).segs;const coords=[];segs.forEach(s=>{if(s.slat&&s.slon)coords.push([s.slat,s.slon]);if(s.elat&&s.elon)coords.push([s.elat,s.elon]);});if(!coords.length)return null;return L.latLngBounds(coords).pad(0.12)}
+function getAllBounds(daysData){const coords=[];Object.values(daysData).forEach(dd=>dd.segs.forEach(s=>{if(s.slat&&s.slon)coords.push([s.slat,s.slon]);if(s.elat&&s.elon)coords.push([s.elat,s.elon]);}));if(!coords.length)return null;return L.latLngBounds(coords).pad(0.08)}
+
+function buildMapLayers(mapInst,daysData,allDays){
+  const dayLayers={},labelLayers={},arrowLayers={};
+  allDays.forEach(d=>{dayLayers[d]=L.layerGroup().addTo(mapInst);labelLayers[d]=L.layerGroup();arrowLayers[d]=L.layerGroup();});
+  const locMap={};
+  const placedLabelCoords=[];
+  function getOffsetCoord(lat,lon){
+    let clat=lat,clon=lon,overlapping=true,angle=0,radius=0.005;
+    while(overlapping&&radius<0.1){
+      overlapping=placedLabelCoords.some(p=>{const dlat=p[0]-clat,dlon=p[1]-clon;return Math.sqrt(dlat*dlat+dlon*dlon)<0.015;});
+      if(overlapping){angle+=Math.PI/4;if(angle>Math.PI*2){angle=0;radius+=0.005;}clat=lat+Math.sin(angle)*radius;clon=lon+Math.cos(angle)*radius;}
+    }
+    placedLabelCoords.push([clat,clon]);return[clat,clon];
+  }
+  allDays.forEach(d=>{
+    const dd=daysData[d];if(!dd)return;
+    dd.segs.forEach(s=>{
+      if(!s.slat||!s.slon||!s.elat||!s.elon)return;
+      const line=L.polyline([[s.slat,s.slon],[s.elat,s.elon]],{color:dd.color,weight:3,opacity:1,dashArray:s.mode==='flight'?'8,5':s.mode==='train'?'5,3':null});
+      line.on('mouseover',e=>showTooltip(mapInst,[{day:d,seg:s,color:dd.color}],e));
+      line.on('mouseout',()=>hideTooltip(mapInst));
+      dayLayers[d].addLayer(line);
+      const midLat=(s.slat+s.elat)/2,midLon=(s.slon+s.elon)/2;
+      const angle=Math.atan2(s.slat-s.elat,s.elon-s.slon)*(180/Math.PI);
+      const arrowIcon=L.divIcon({html:`<div style="transform:rotate(${angle}deg);width:0;height:0;border-top:5px solid transparent;border-bottom:5px solid transparent;border-left:10px solid ${dd.color};filter:drop-shadow(0 0 2px rgba(0,0,0,0.4));"></div>`,className:'',iconSize:[10,10],iconAnchor:[5,5]});
+      arrowLayers[d].addLayer(L.marker([midLat,midLon],{icon:arrowIcon,interactive:false}));
+      const key=s.name?s.name.trim().toLowerCase():`${s.elat.toFixed(4)},${s.elon.toFixed(4)}`;
+      if(!locMap[key])locMap[key]={coords:[s.elat,s.elon],visits:[],name:s.name||'Unknown Place'};
+      locMap[key].visits.push({day:d,seg:s,color:dd.color});
+    });
+  });
+  Object.values(locMap).forEach(loc=>{
+    let cat=loc.visits[0].seg.cat;
+    loc.visits.forEach(v=>{if(['hotel','airport','station'].includes(v.seg.cat))cat=v.seg.cat;});
+    const[offLat,offLon]=getOffsetCoord(loc.coords[0],loc.coords[1]);
+    const daysVisited=[...new Set(loc.visits.map(v=>v.day))];
+    daysVisited.forEach(d=>{
+      const color=daysDataCache[d]?.color||getDayColor(0);
+      const marker=L.marker([loc.coords[0],loc.coords[1]],{icon:makeDivIcon(cat,color)});
+      marker.on('mouseover',e=>showTooltip(mapInst,loc.visits,e));
+      marker.on('mouseout',()=>hideTooltip(mapInst));
+      dayLayers[d].addLayer(marker);
+      if(cat!=='station'){
+        const lblMarker=L.marker([loc.coords[0]+0.003,loc.coords[1]],{icon:makeLabelIcon(loc.name,color),interactive:false});
+        labelLayers[d].addLayer(lblMarker);
+      }
+    });
+  });
+  return{dayLayers,labelLayers,arrowLayers};
+}
+
+let tooltipTimeout;
+function showTooltip(mapInst,visits,e){
+  if(typeof tooltipTimeout!=='undefined')clearTimeout(tooltipTimeout);
+  const ttId=mapInst===embMap?'embTooltipBox':'mapTooltipBox';
+  const containerId=mapInst===embMap?'embeddedMapWrap':'fullscreenMap';
+  const ttBox=document.getElementById(ttId);
+  let activeVisits=visits;
+  if(currentMapMode!=='all')activeVisits=visits.filter(v=>+v.day===+currentMapMode);
+  if(!activeVisits.length)return;
+  let html=`<b>${activeVisits[0].seg.name||'—'}</b><div class="diary-scroll">`;
+  activeVisits.forEach(v=>{
+    const s=v.seg;const modeLbl=(s.mode||'').charAt(0).toUpperCase()+(s.mode||'').slice(1);
+    html+=`<div style="margin-top:8px;border-top:1px solid #eee;padding-top:6px;">
+      <div style="color:${v.color};font-weight:bold;font-size:11px;margin-bottom:4px;">Day ${v.day} — ${s.cat||'—'}</div>
+      <div class="tt-row"><span class="tt-label">Arrive</span><span class="tt-val">${s.arr_time||'—'}</span></div>
+      <div class="tt-row"><span class="tt-label">Mode</span><span class="tt-val">${modeLbl}</span></div>
+      <div class="tt-row"><span class="tt-label">Distance</span><span class="tt-val">${s.dist_km} km · ${s.travel_min} min</span></div>
+      <div class="tt-row"><span class="tt-label">Visit</span><span class="tt-val">${fdur(s.visit_min)}</span></div>
+      ${s.notes?`<div style="margin-top:5px;font-size:10px;color:#777;">${s.notes.substring(0,120)}${s.notes.length>120?'…':''}</div>`:''}
+    </div>`;
+  });
+  html+=`</div>`;
+  ttBox.innerHTML=html;
+  const cont=document.getElementById(containerId).getBoundingClientRect();
+  ttBox.style.display='block';
+  let left=e.originalEvent.clientX-cont.left+14;
+  let top=e.originalEvent.clientY-cont.top-10;
+  if(left+ttBox.offsetWidth>cont.width-4)left=Math.max(4,e.originalEvent.clientX-cont.left-ttBox.offsetWidth-14);
+  if(top+ttBox.offsetHeight>cont.height-4)top=Math.max(4,e.originalEvent.clientY-cont.top-ttBox.offsetHeight-14);
+  left=Math.max(4,Math.min(left,cont.width-ttBox.offsetWidth-4));
+  top=Math.max(4,Math.min(top,cont.height-ttBox.offsetHeight-4));
+  ttBox.style.left=left+'px';ttBox.style.top=top+'px';
+}
+function hideTooltip(mapInst){
+  tooltipTimeout=setTimeout(()=>{
+    const box=document.getElementById(mapInst===embMap?'embTooltipBox':'mapTooltipBox');
+    if(box)box.style.display='none';
+  },250);
+}
+
+function updateLayerVisibility(mapInst,dayLayers,labelLayers,arrowLayers,allDays,selectedDay,isAll){
+  allDays.forEach(d=>{
+    const layer=dayLayers[d],lbl=labelLayers[d],arrL=arrowLayers[d];
+    if(!layer)return;
+    const isFs=mapInst===fsMap;
+    const legEl=isFs?document.getElementById('modal-leg-'+d):null;
+    if(isAll){
+      layer.eachLayer(l=>{if(l.setOpacity)l.setOpacity(0.75);if(l.setStyle)l.setStyle({opacity:0.75,weight:2.5,color:daysDataCache[d]?.color||getDayColor(0)});});
+      if(mapInst.hasLayer(lbl))mapInst.removeLayer(lbl);
+      if(mapInst.hasLayer(arrL))mapInst.removeLayer(arrL);
+      if(legEl)legEl.classList.remove('active');
+    } else {
+      const isPast=d<selectedDay,isFuture=d>selectedDay;
+      if(isFuture){
+        layer.eachLayer(l=>{if(l.setOpacity)l.setOpacity(0);if(l.setStyle)l.setStyle({opacity:0,weight:0});});
+        if(mapInst.hasLayer(lbl))mapInst.removeLayer(lbl);
+        if(mapInst.hasLayer(arrL))mapInst.removeLayer(arrL);
+        if(legEl)legEl.classList.remove('active');
+      } else if(isPast){
+        layer.eachLayer(l=>{if(l.setOpacity)l.setOpacity(0.2);if(l.setStyle)l.setStyle({opacity:0.2,color:'#aaa',weight:1.5});});
+        if(mapInst.hasLayer(lbl))mapInst.removeLayer(lbl);
+        if(mapInst.hasLayer(arrL))mapInst.removeLayer(arrL);
+        if(legEl)legEl.classList.remove('active');
+      } else {
+        layer.eachLayer(l=>{if(l.setOpacity)l.setOpacity(1);if(l.setStyle)l.setStyle({opacity:1,color:daysDataCache[d]?.color||getDayColor(0),weight:3.5});});
+        if(!mapInst.hasLayer(lbl))mapInst.addLayer(lbl);
+        if(!mapInst.hasLayer(arrL))mapInst.addLayer(arrL);
+        if(legEl)legEl.classList.add('active');
+      }
+    }
+  });
+}
+
+function initEmbeddedMap(){
+  if(embMap){embMap.remove();embMap=null;embMapReady=false;}
+  embMap=L.map('embeddedMap',{zoomControl:true,scrollWheelZoom:false,dragging:true,attributionControl:false});
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{
+    attribution:'&copy; OpenStreetMap &copy; CARTO',subdomains:'abcd',maxZoom:19
+  }).addTo(embMap);
+  embMapReady=true;
+}
+
+function initFullscreenMap(){
+  if(fsMap){fsMap.remove();fsMap=null;fsMapReady=false;}
+  fsMap=L.map('fullscreenMap',{zoomControl:true,scrollWheelZoom:true,dragging:true});
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{
+    attribution:'&copy; OpenStreetMap contributors &copy; CARTO',subdomains:'abcd',maxZoom:19
+  }).addTo(fsMap);
+  fsMapReady=true;
+}
+
+function loadMapForQuery(data){
+  const mapSec=document.getElementById('mapSection');
+  if(!data||!data.route||!data.route.length){
+    if(mapSec)mapSec.style.display='none';
+    return;
+  }
+  if(mapSec)mapSec.style.display='';
+  document.getElementById('embeddedMap').style.display='';
+  document.getElementById('mapNoData').style.display='none';
+  daysDataCache=buildDaysData(data);
+  embAllDays=Object.keys(daysDataCache).map(Number).sort((a,b)=>a-b);
+  if(embMap){
+    Object.values(embDayLayers).forEach(l=>embMap.removeLayer(l));
+    Object.values(embLabelLayers).forEach(l=>{if(embMap.hasLayer(l))embMap.removeLayer(l);});
+    Object.values(embArrowLayers).forEach(l=>{if(embMap.hasLayer(l))embMap.removeLayer(l);});
+  } else {
+    initEmbeddedMap();
+  }
+  const{dayLayers,labelLayers,arrowLayers}=buildMapLayers(embMap,daysDataCache,embAllDays);
+  embDayLayers=dayLayers;embLabelLayers=labelLayers;embArrowLayers=arrowLayers;
+  updateMapForDay('all');
+  setTimeout(()=>{if(embMap)embMap.invalidateSize();},200);
+}
+
+function syncFsButtons(dayOrAll){
+  document.querySelectorAll('.modal-day-btn').forEach(b=>{
+    if(b.dataset.day==='all')b.classList.toggle('active',dayOrAll==='all');
+    else b.classList.toggle('active',+b.dataset.day===+dayOrAll);
+  });
+  document.querySelectorAll('.modal-leg-item').forEach(el=>{el.classList.toggle('active',dayOrAll!=='all'&&+el.dataset.day===+dayOrAll);});
+  const mSel=document.getElementById('mapModalDaySelect');if(mSel)mSel.value=String(dayOrAll);
+}
+
+function updateMapForDay(dayOrAll){
+  currentMapMode=dayOrAll;
+  if(!embMap||!embAllDays.length)return;
+  if(dayOrAll==='all'){
+    updateLayerVisibility(embMap,embDayLayers,embLabelLayers,embArrowLayers,embAllDays,null,true);
+    const b=getAllBounds(daysDataCache);if(b)embMap.fitBounds(b,{animate:true,duration:0.4});
+    hideTooltip(embMap);
+    if(fsMap&&fsAllDays.length){updateLayerVisibility(fsMap,fsDayLayers,fsLabelLayers,fsArrowLayers,fsAllDays,null,true);const b2=getAllBounds(daysDataCache);if(b2)fsMap.fitBounds(b2,{animate:true,duration:0.4});syncFsButtons('all');}
+  } else {
+    const d=+dayOrAll;
+    updateLayerVisibility(embMap,embDayLayers,embLabelLayers,embArrowLayers,embAllDays,d,false);
+    const b=getBoundsForDay(daysDataCache,d);if(b)embMap.fitBounds(b,{animate:true,duration:0.4});
+    hideTooltip(embMap);
+    if(fsMap&&fsAllDays.length){updateLayerVisibility(fsMap,fsDayLayers,fsLabelLayers,fsArrowLayers,fsAllDays,d,false);const b2=getBoundsForDay(daysDataCache,d);if(b2)fsMap.fitBounds(b2,{animate:true,duration:0.4});syncFsButtons(d);}
+  }
+}
+
+function openMapModal(){
+  const modal=document.getElementById('mapModal');modal.style.display='flex';document.body.style.overflow='hidden';
+  if(!fsMap)initFullscreenMap();
+  const data=state.data[state.qid];if(!data||!data.route||!data.route.length)return;
+  Object.values(fsDayLayers).forEach(l=>fsMap.removeLayer(l));
+  Object.values(fsLabelLayers).forEach(l=>{if(fsMap.hasLayer(l))fsMap.removeLayer(l);});
+  Object.values(fsArrowLayers).forEach(l=>{if(fsMap.hasLayer(l))fsMap.removeLayer(l);});
+  fsAllDays=embAllDays.slice();
+  const{dayLayers,labelLayers,arrowLayers}=buildMapLayers(fsMap,daysDataCache,fsAllDays);
+  fsDayLayers=dayLayers;fsLabelLayers=labelLayers;fsArrowLayers=arrowLayers;
+  buildModalToolbar(data);
+  setTimeout(()=>{
+    fsMap.invalidateSize();
+    if(currentMapMode==='all'){updateLayerVisibility(fsMap,fsDayLayers,fsLabelLayers,fsArrowLayers,fsAllDays,null,true);const b=getAllBounds(daysDataCache);if(b)fsMap.fitBounds(b);syncFsButtons('all');}
+    else{const d=+currentMapMode;updateLayerVisibility(fsMap,fsDayLayers,fsLabelLayers,fsArrowLayers,fsAllDays,d,false);const b=getBoundsForDay(daysDataCache,d);if(b)fsMap.fitBounds(b);syncFsButtons(d);}
+  },80);
+}
+function closeMapModal(){
+  document.getElementById('mapModal').style.display='none';
+  document.body.style.overflow='';
+  // Restore map to whatever the topbar day selector currently shows
+  const topbarVal = document.getElementById('daySelect')?.value || 'all';
+  updateMapForDay(topbarVal === 'all' ? 'all' : +topbarVal);
+  if(embMap)setTimeout(()=>embMap.invalidateSize(),80);
+}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeMapModal();});
+
+function buildModalToolbar(data){
+  const btnWrap=document.getElementById('mapModalDayBtns');btnWrap.innerHTML='';
+  document.getElementById('mapModalTitle').textContent='Route Map · Query '+(data.query_id||'');
+  document.getElementById('mapModalSub').textContent=data.query_summary||data.query||'';
+  const allBtn=document.createElement('button');allBtn.className='modal-day-btn all-btn';allBtn.dataset.day='all';allBtn.textContent='All Days';allBtn.onclick=()=>updateMapForDay('all');btnWrap.appendChild(allBtn);
+  embAllDays.forEach(d=>{const btn=document.createElement('button');btn.className='modal-day-btn';btn.dataset.day=d;btn.textContent='Day '+d;btn.onclick=()=>updateMapForDay(d);btnWrap.appendChild(btn);});
+  const mSel=document.getElementById('mapModalDaySelect');if(mSel){mSel.innerHTML='<option value="all">All Days</option>';embAllDays.forEach(d=>{const o=document.createElement('option');o.value=d;o.textContent='Day '+d;mSel.appendChild(o);});}
+  const legItems=document.getElementById('mapModalLegItems');legItems.innerHTML='';
+  embAllDays.forEach(d=>{
+    const color=daysDataCache[d]?.color||getDayColor(0);
+    const el=document.createElement('div');el.className='modal-leg-item';el.id='modal-leg-'+d;el.dataset.day=d;
+    el.innerHTML=`<span style="display:inline-block;width:20px;height:2px;background:${color};border-radius:2px;"></span><span style="font-size:11px;font-weight:600;">Day ${d}</span>`;
+    el.onclick=()=>updateMapForDay(d);legItems.appendChild(el);
+  });
+}
+
+/* ── Override switchQuery to also load map ── */
+const _origSwitchQuery = switchQuery;
+switchQuery = function(qid){
+  // Reset day selector to "All Days" before switching
+  const daySel = document.getElementById('daySelect');
+  if(daySel) daySel.value = 'all';
+  const cddDayLbl = document.getElementById('cddDayLabel');
+  if(cddDayLbl) cddDayLbl.textContent = 'All Days';
+  document.querySelectorAll('#cddDayPanel .cdd-option').forEach(el=>{
+    el.classList.toggle('selected', el.dataset.value === 'all');
+  });
+  currentMapMode = 'all';
+  _origSwitchQuery(qid);
+  const data = state.data[qid];
+  if(data){
+    loadMapForQuery(data);
+  }
+};
+
+(async function init(){
+  document.getElementById('loaderEl').style.display='flex';
+  document.getElementById('mainWrap').style.display='none';
+
+  const available=await loadAllQueries();
+
+  if(!available.length){
+    document.getElementById('loaderEl').innerHTML='<div class="err-note">No query data found.<br>Place <code>Phase3_Summary_*.json</code> files in a <code>queries/</code> folder.</div>';
+    return;
+  }
+
+  const sel=document.getElementById('querySelect');
+  available.forEach(qid=>{
+    const d=state.data[qid];
+    const label=(d&&d.heading)?d.heading:'Travel Plan';
+    const opt=document.createElement('option');
+    opt.value=qid; opt.textContent='Query '+qid+' — '+label;
+    sel.appendChild(opt);
+  });
+  sel.addEventListener('change',()=>switchQuery(sel.value));
+
+  // Build custom dropdown panel for queries
+  cddBuildQueryPanel(available);
+
+  switchQuery(available[0]);
+})();
+</script>
+</body>
+</html>
